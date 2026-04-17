@@ -402,6 +402,26 @@ function buildTagInput(field, roundId, current, suggestions, placeholder) {
   `;
 }
 
+function getTagInputId(field, roundId) {
+  return `tag-${field}-${roundId}-input`;
+}
+
+function focusTagInput(field, roundId) {
+  requestAnimationFrame(() => {
+    const input = document.getElementById(getTagInputId(field, roundId));
+    if (input) input.focus();
+  });
+}
+
+function focusNextTagInput(field, roundId) {
+  const fieldOrder = ['champions', 'pool', 'items'];
+  const currentIndex = fieldOrder.indexOf(field);
+  const nextField = fieldOrder[currentIndex + 1];
+  if (!nextField) return;
+  const nextInput = document.getElementById(getTagInputId(nextField, roundId));
+  if (nextInput) nextInput.focus();
+}
+
 function bindTagInput(field, roundId, suggestions) {
   const id = `tag-${field}-${roundId}`;
   const input = document.getElementById(`${id}-input`);
@@ -445,17 +465,21 @@ function bindTagInput(field, roundId, suggestions) {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (highlightIdx >= 0 && items[highlightIdx]) {
-        addTag(field, roundId, items[highlightIdx].dataset.val, Number(items[highlightIdx].dataset.stars || 0) || null);
+        addTag(field, roundId, items[highlightIdx].dataset.val, Number(items[highlightIdx].dataset.stars || 0) || null, true);
       } else if (input.value.trim()) {
         const parsed = parseTagInput(field, input.value.trim());
-        addTag(field, roundId, parsed.name, parsed.stars);
+        addTag(field, roundId, parsed.name, parsed.stars, true, parsed.starsOnly);
       }
       input.value = '';
       suggestBox.classList.add('hidden');
       highlightIdx = -1;
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      suggestBox.classList.add('hidden');
+      focusNextTagInput(field, roundId);
     } else if (e.key === 'Backspace' && !input.value) {
       const s = state.rounds[roundId][field];
-      if (s.length > 0) removeTag(field, roundId, s.length - 1);
+      if (s.length > 0) removeTag(field, roundId, s.length - 1, null, true);
     } else if (e.key === 'Escape') {
       suggestBox.classList.add('hidden');
     }
@@ -478,18 +502,28 @@ function formatSuggestionLabel(match) {
 
 function parseTagInput(field, rawValue) {
   const value = String(rawValue || '').trim();
-  if (!value) return { name: '', stars: null };
+  if (!value) return { name: '', stars: null, starsOnly: false };
 
   if (field !== 'champions') {
-    return { name: value, stars: null };
+    return { name: value, stars: null, starsOnly: false };
   }
 
-  const match = value.match(/^(.*?)(?:\s+([123])\s*(?:sao|\*))$/i);
-  if (!match) return { name: value, stars: null };
+  const starsOnlyMatch = value.match(/^([123])\s*(?:sao|\*)$/i);
+  if (starsOnlyMatch) {
+    return {
+      name: '',
+      stars: Number(starsOnlyMatch[1]) || null,
+      starsOnly: true,
+    };
+  }
+
+  const match = value.match(/^(.*?)(?:[\s,/-]+([123])\s*(?:sao|\*))$/i);
+  if (!match) return { name: value, stars: null, starsOnly: false };
 
   return {
     name: match[1].trim(),
     stars: Number(match[2]) || null,
+    starsOnly: false,
   };
 }
 
@@ -524,9 +558,22 @@ function getSuggestionSearchText(field, suggestion) {
   return [normalizedSuggestion, ...aliases.map(normalizeSearchText)].join(' ');
 }
 
-function addTag(field, roundId, value, stars = null) {
-  if (!value) return;
+function addTag(field, roundId, value, stars = null, keepFocus = false, starsOnly = false) {
   const s = state.rounds[roundId];
+
+  if (field === 'champions' && starsOnly && stars) {
+    const lastChampion = s[field][s[field].length - 1];
+    if (lastChampion) {
+      lastChampion.stars = stars;
+      selectRound(roundId);
+      updatePromptPreview();
+      buildTimeline();
+      if (keepFocus) focusTagInput(field, roundId);
+    }
+    return;
+  }
+
+  if (!value) return;
   const existing = s[field].find(t => t.name === value && (t.stars || null) === (stars || null));
   if (existing) {
     existing.qty++;
@@ -536,9 +583,10 @@ function addTag(field, roundId, value, stars = null) {
   selectRound(roundId);
   updatePromptPreview();
   buildTimeline();
+  if (keepFocus) focusTagInput(field, roundId);
 }
 
-function removeTag(field, roundId, index, event) {
+function removeTag(field, roundId, index, event, keepFocus = false) {
   if (event) event.stopPropagation();
   const s = state.rounds[roundId];
   const existing = s[field][index];
@@ -549,6 +597,7 @@ function removeTag(field, roundId, index, event) {
   selectRound(roundId);
   updatePromptPreview();
   buildTimeline();
+  if (keepFocus) focusTagInput(field, roundId);
 }
 
 // ============================================================
