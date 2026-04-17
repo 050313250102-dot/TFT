@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TFT Prompt Builder 17.1</title>
+  
+  
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">⬡</span>
+          <span class="logo-text">TFT Prompt Builder</span>
+          <span class="logo-badge">17.1</span>
+        </div>
+        <div class="header-actions">
+          <button id="btn-meta" class="btn btn-meta" onclick="openMetaPanel()">
+            <span>🏆</span> Meta Comps
+          </button>
+          <button id="btn-ai-chat" class="btn btn-ai" onclick="toggleAIChat()">
+            <span>💬</span> AI Chat
+          </button>
+          <button class="btn btn-ghost" style="padding: 6px 10px; border-color: rgba(63,207,142,0.3)" onclick="openAISettings()" title="AI Settings">
+            ⚙️
+          </button>
+          <button id="btn-copy-prompt" class="btn btn-primary" onclick="copyPrompt()">
+            <span>📋</span> Copy Prompt
+          </button>
+          <button id="btn-reset" class="btn btn-ghost" onclick="resetAll()">
+            <span>🔄</span> Reset
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="main-layout">
+      <!-- LEFT: Timeline -->
+      <aside class="timeline-panel">
+        <div class="timeline-title">Timeline</div>
+        <div class="timeline" id="timeline"></div>
+      </aside>
+
+      <!-- CENTER: Active Round Editor -->
+      <section class="editor-panel" id="editor-panel">
+        <div class="editor-placeholder" id="editor-placeholder">
+          <div class="placeholder-icon">⬡</div>
+          <div class="placeholder-text">Chọn một Round để bắt đầu</div>
+        </div>
+        <div id="editor-content" class="editor-content hidden"></div>
+      </section>
+
+      <!-- RIGHT: Live Prompt Preview -->
+      <aside class="prompt-panel">
+        <div class="prompt-header">
+          <div class="prompt-title">🤖 Prompt Preview</div>
+          <button class="btn btn-sm btn-ghost" onclick="copyPrompt()">Copy</button>
+        </div>
+        <div class="prompt-body" id="prompt-preview">
+          <span class="prompt-empty">Prompt sẽ hiện ở đây khi bạn điền thông tin...</span>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- META COMPS MODAL -->
+  <div id="meta-modal" class="meta-modal hidden" onclick="closeMetaOnBackdrop(event)">
+    <div class="meta-modal-box">
+      <div class="meta-modal-header">
+        <div class="meta-modal-title">
+          <span class="meta-title-icon">🏆</span>
+          Meta Comps
+          <span class="meta-patch-badge">Patch 17.1</span>
+        </div>
+        <button class="meta-close-btn" onclick="closeMetaPanel()">✕</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="meta-filters">
+        <div class="meta-filter-group">
+          <span class="meta-filter-label">Tier</span>
+          <div class="meta-filter-pills" id="filter-tier">
+            <button class="filter-pill active" data-val="all" onclick="setFilter('tier','all',this)">Tất cả</button>
+            <button class="filter-pill tier-s" data-val="S" onclick="setFilter('tier','S',this)">S</button>
+            <button class="filter-pill tier-a" data-val="A" onclick="setFilter('tier','A',this)">A</button>
+            <button class="filter-pill tier-b" data-val="B" onclick="setFilter('tier','B',this)">B</button>
+            <button class="filter-pill tier-c" data-val="C" onclick="setFilter('tier','C',this)">C</button>
+            <button class="filter-pill tier-x" data-val="X" onclick="setFilter('tier','X',this)">X</button>
+          </div>
+        </div>
+        <div class="meta-filter-group">
+          <span class="meta-filter-label">Độ khó</span>
+          <div class="meta-filter-pills" id="filter-diff">
+            <button class="filter-pill active" data-val="all" onclick="setFilter('diff','all',this)">Tất cả</button>
+            <button class="filter-pill" data-val="EASY" onclick="setFilter('diff','EASY',this)">🟢 Dễ</button>
+            <button class="filter-pill" data-val="MEDIUM" onclick="setFilter('diff','MEDIUM',this)">🟡 Trung bình</button>
+            <button class="filter-pill" data-val="HARD" onclick="setFilter('diff','HARD',this)">🔴 Khó</button>
+          </div>
+        </div>
+        <div class="meta-filter-group">
+          <span class="meta-filter-label">Chiến thuật</span>
+          <div class="meta-filter-pills" id="filter-play">
+            <button class="filter-pill active" data-val="all" onclick="setFilter('play','all',this)">Tất cả</button>
+            <button class="filter-pill" data-val="Fast 8" onclick="setFilter('play','Fast 8',this)">Fast 8</button>
+            <button class="filter-pill" data-val="Fast 9" onclick="setFilter('play','Fast 9',this)">Fast 9</button>
+            <button class="filter-pill" data-val="Reroll" onclick="setFilter('play','Reroll',this)">Reroll</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comp Grid -->
+      <div class="meta-comp-grid" id="meta-comp-grid"></div>
+    </div>
+  </div>
+
+  <!-- AI CHAT FLOATING WINDOW -->
+  <div id="ai-chat-window" class="ai-chat-window hidden">
+    <div class="ai-chat-header">
+      <div class="ai-chat-title">
+        <span class="ai-icon">🤖</span> AI Assistant
+      </div>
+      <div class="ai-chat-actions">
+        <button class="ai-action-btn" onclick="openAISettings()" title="Settings">⚙️</button>
+        <button class="ai-action-btn" onclick="toggleAIChat()" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="ai-chat-body" id="ai-chat-body">
+      <div class="ai-msg bot"><div class="ai-msg-content">Chào bạn! Tôi là trợ lý phân tích TFT 17.1. Nhập cấu hình API để bắt đầu.</div></div>
+    </div>
+    <div class="ai-chat-footer">
+      <input type="text" id="ai-chat-input" placeholder="Hỏi tôi về đội hình..." onkeypress="handleChatEnter(event)" />
+      <button class="btn-send" onclick="sendChatMessage()">➤</button>
+    </div>
+  </div>
+
+  <!-- AI SETTINGS MODAL -->
+  <div id="ai-settings-modal" class="meta-modal hidden" onclick="closeAISettingsOnBackdrop(event)">
+    <div class="meta-modal-box" style="width: 400px;">
+      <div class="meta-modal-header">
+        <div class="meta-modal-title">⚙️ AI Settings</div>
+        <button class="meta-close-btn" onclick="closeAISettings()">✕</button>
+      </div>
+      <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <div class="field-group">
+          <div class="field-label" style="color:var(--accent-green)">API Key (9router)</div>
+          <input type="password" id="cfg-apikey" class="form-input" placeholder="sk-..." />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Base URL</div>
+          <input type="text" id="cfg-baseurl" class="form-input" placeholder="http://localhost:20128/v1" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Model Name</div>
+          <input type="text" id="cfg-model" class="form-input" placeholder="gpt-5" />
+        </div>
+        <button class="btn btn-primary" style="justify-content: center; margin-top: 8px; background: linear-gradient(135deg, #3fcf8e, #29a87a); box-shadow: 0 4px 16px rgba(63,207,142,0.3);" onclick="saveAISettings()">Lưu cài đặt</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="augment-icons.js"></script>
+  <script src="augment-search-aliases.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
