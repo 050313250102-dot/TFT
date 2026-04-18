@@ -48,6 +48,10 @@
 
       <!-- CENTER: Active Round Editor -->
       <section class="editor-panel" id="editor-panel">
+        <div class="editor-mode-switch">
+          <button id="mode-quick" class="mode-chip active" onclick="setAppMode('quick')">⚡ Quyết Định Nhanh</button>
+          <button id="mode-timeline" class="mode-chip" onclick="setAppMode('timeline')">🗂 Timeline</button>
+        </div>
         <div class="editor-placeholder" id="editor-placeholder">
           <div class="placeholder-icon">⬡</div>
           <div class="placeholder-text">Chọn một Round để bắt đầu</div>
@@ -67,6 +71,11 @@
       </aside>
     </main>
   </div>
+
+  <button id="ai-bottom-bubble" class="ai-bottom-bubble" onclick="toggleAIChat()" title="Mở AI Chat">
+    <span class="ai-bottom-bubble-icon">🤖</span>
+    <span class="ai-bottom-bubble-text">AI</span>
+  </button>
 
   <!-- META COMPS MODAL -->
   <div id="meta-modal" class="meta-modal hidden" onclick="closeMetaOnBackdrop(event)">

@@ -24,11 +24,77 @@ const state = {
   currentRoundId: null,
   rounds: {},        // { roundId: { champions: [], pool: [], items: [], tier: null, augments: [], god: null } }
 };
+const STORAGE_KEYS = {
+  currentGame: 'tft_current_game_state_v1',
+  previousGame: 'tft_previous_game_state_v1',
+  quickDecision: 'tft_quick_decision_v1',
+  appMode: 'tft_app_mode_v1',
+};
+const quickDecisionState = createDefaultQuickDecisionState();
+let appMode = localStorage.getItem(STORAGE_KEYS.appMode) || 'quick';
+const STRATEGY_GUIDE_CONTEXT = `
+### STRATEGIC GUIDE PATCH 17.1
+Đây là lớp kiến thức chiến lược đã được nạp từ tài liệu phân tích do người dùng cung cấp. Hãy dùng nó như strategic prior, nhưng khi xung đột với dataset meta comp hiện tại hoặc state ván đấu hiện tại thì phải ưu tiên dữ liệu app trước.
+
+1. TRIẾT LÝ CHUNG
+- Mùa 17 xoay quanh Realm of the Gods thay cho carousel, nên trọng tâm là quản lý tài nguyên, chọn blessing đúng timeline, và tối ưu line dài hạn.
+- Meta hiện tại ưu tiên tận dụng tài nguyên từ thần linh để lên cap late game mạnh, đặc biệt là các line 5 vàng khi có điều kiện.
+- Tuy nhiên với mục tiêu của người chơi hiện tại, khi nhiều line có EV gần nhau thì ưu tiên line ít thao tác, ít pivot, ít yêu cầu nhớ nhịp roll phức tạp hơn.
+
+2. TIMELINE THẦN LINH
+- Các mốc chọn blessing là 2-4, 3-4, 4-4; God Boon lớn nhận ở 4-7.
+- Giai đoạn đầu: nếu đang mạnh và muốn giữ tempo, ưu tiên lựa chọn giúp giữ win streak hoặc ghép đồ sớm; nếu đang yếu và cần bảo hiểm máu hoặc kinh tế, ưu tiên lựa chọn hồi máu, vàng, XP.
+- Giai đoạn giữa: nếu đang hướng reroll thì ưu tiên boon hỗ trợ tài nguyên tướng/nhân bản; nếu hướng fast 8/fast 9 thì ưu tiên boon cho vàng, XP, tướng cao tiền hoặc cap late game.
+- Giai đoạn 4-7: boon mạnh thường là boon giúp tăng cap combat ngay lập tức hoặc snowball tài nguyên thành board capped.
+
+3. ĐỊNH HƯỚNG CHỌN THẦN
+- Ahri: mạnh về vàng, XP, reroll; hợp line muốn lên cấp và cap late.
+- Aurelion Sol: thiên về thử thách đổi lấy phần thưởng lớn; hợp spot snowball và người chơi đủ tài nguyên để greedy.
+- Ekko: thiên về phần thưởng trễ, cổ vật, anomaly; hợp board cần item utility hoặc swing turn về sau.
+- Evelynn: đổi máu lấy sức mạnh tức thời; chỉ tốt khi thật sự cần spike và chấp nhận variance.
+- Kayle: mạnh về mảnh đồ và nâng đồ; thường là lựa chọn combat ổn định, đặc biệt khi có carry rõ ràng.
+- Soraka: thiên về hồi máu và ổn định; tốt khi đang cần giữ mạng hoặc recover sau chuỗi thua.
+- Thresh: phần thưởng ngẫu nhiên cộng vàng; thiên về value dài hạn.
+- Varus: cho tướng, máy nhân bản, hỗ trợ hướng late game đắt tiền.
+- Yasuo: buff ô trên bàn; cực mạnh khi ô đẹp cho carry hoặc frontline chủ lực.
+
+4. NHẬN ĐỊNH META
+- Line dùng tướng 5 vàng đang có trần sức mạnh rất cao nếu có đủ tài nguyên.
+- Các nguồn dữ liệu real-time như MetaTFT, Tactic.tools, Mobalytics thường cần để kiểm tra biến thể tối ưu, nhưng trong app này phải ưu tiên dataset nội bộ trước.
+- Khi tư vấn, nếu spot đủ đẹp, cần chỉ ra đường chuyển sang capped board có khả năng top 1 thay vì chỉ nói cách top 4 an toàn.
+
+5. TỘC HỆ ĐÁNG CHÚ Ý
+- Dark Star: sức mạnh hành quyết và snowball combat, Jhin là carry trần cao.
+- Mecha: dạng biến hình cực mạnh nhưng chiếm nhiều slot, đổi lại được spike combat rõ.
+- Meeple: mạnh về kinh tế, nhân bản, value tích lũy; Bard là quân cờ cực kỳ đặc biệt.
+- Space Groove: tăng tiến theo thời gian giao tranh; càng kéo combat dài càng mạnh.
+
+6. TƯỚNG 5 VÀNG CHỦ CHỐT
+- Jhin: carry vật lý tầm xa trần rất cao.
+- Bard: tạo value cực lớn và có thể bắt cóc tướng địch để sinh lời.
+- Blitzcrank: disrupt cực mạnh, giá trị vị trí rất cao.
+- Fiora: carry đấu sĩ 1v1 cực mạnh, đặc biệt khi có đủ đồ sống lâu và cắt tuyến sau.
+
+7. NGUYÊN TẮC ĐỒ
+- Ưu tiên đồ flex mạnh từ sớm để giữ máu và giữ quyền chuyển bài.
+- Guinsoo, Edge of Night, Gunblade là nhóm đồ đa dụng đáng ưu tiên trong nhiều line.
+- Khi tư vấn đồ, phải nói rõ đâu là đồ giữ máu sớm, đâu là đồ chốt cho carry cuối trận.
+
+8. MẸO VI MÔ
+- Luôn coi trọng scout khi chơi các quân disrupt như Blitzcrank.
+- Nếu có cơ chế nhân bản hoặc phần thưởng trễ, cần tính số vòng hoàn vốn trước khi khuyên người chơi commit.
+- Với reroll: 1-cost thường roll ở cấp thấp, 2-cost slowroll cấp 6, 3-cost thường roll mạnh ở cấp 7.
+
+9. CÁCH TRẢ LỜI ƯU TIÊN
+- Luôn ưu tiên khuyến nghị ngắn, thực dụng, và theo thứ tự hành động.
+- Nếu có line “ít công” nhưng trần thấp hơn rõ rệt line khác, hãy nêu tradeoff.
+- Nếu spot đủ đẹp để top 1, phải nói thẳng line cap nào giúp top 1 và mốc nào phải lên cấp/roll/chuyển bài.
+`.trim();
 
 // Initialize all round state
-TFT_DATA.rounds.forEach(r => {
-  state.rounds[r.id] = { champions: [], pool: [], items: [], tier: null, augments: [], god: null, augmentSearch: '' };
-});
+state.rounds = createEmptyRoundsState();
+loadSavedGameState();
+loadQuickDecisionState();
 
 // ---- DOM ----
 const timeline       = document.getElementById('timeline');
@@ -59,6 +125,114 @@ const TAG_SEARCH_ALIASES = {
     [normalizeSearchText('LeBlanc')]: ['lb'],
   },
 };
+
+function createEmptyRoundState() {
+  return { champions: [], pool: [], items: [], tier: null, augments: [], god: null, chosenAugment: null, augmentSearch: '', pendingTagQty: {} };
+}
+
+function createDefaultQuickDecisionState() {
+  return {
+    round: '',
+    hp: '',
+    gold: '',
+    level: '',
+    streak: 'even',
+    plan: 'flex',
+    damageType: 'flex',
+    board: '',
+    bench: '',
+    items: '',
+    augments: '',
+    god: '',
+    notes: '',
+  };
+}
+
+function createEmptyRoundsState() {
+  const rounds = {};
+  TFT_DATA.rounds.forEach(r => {
+    rounds[r.id] = createEmptyRoundState();
+  });
+  return rounds;
+}
+
+function sanitizeRoundState(round) {
+  return {
+    champions: Array.isArray(round?.champions) ? round.champions : [],
+    pool: Array.isArray(round?.pool) ? round.pool : [],
+    items: Array.isArray(round?.items) ? round.items : [],
+    tier: round?.tier || null,
+    augments: Array.isArray(round?.augments) ? round.augments : [],
+    god: round?.god || null,
+    chosenAugment: round?.chosenAugment || null,
+    augmentSearch: '',
+    pendingTagQty: {},
+  };
+}
+
+function loadSavedGameState() {
+  const raw = localStorage.getItem(STORAGE_KEYS.currentGame);
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    state.currentRoundId = saved.currentRoundId || null;
+    const rounds = createEmptyRoundsState();
+    Object.keys(rounds).forEach(roundId => {
+      rounds[roundId] = sanitizeRoundState(saved.rounds?.[roundId]);
+    });
+    state.rounds = rounds;
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.currentGame);
+  }
+}
+
+function saveCurrentGameState() {
+  localStorage.setItem(STORAGE_KEYS.currentGame, JSON.stringify({
+    currentRoundId: state.currentRoundId,
+    rounds: state.rounds,
+    savedAt: new Date().toISOString(),
+  }));
+}
+
+function loadQuickDecisionState() {
+  const raw = localStorage.getItem(STORAGE_KEYS.quickDecision);
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    Object.assign(quickDecisionState, createDefaultQuickDecisionState(), saved || {});
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.quickDecision);
+  }
+}
+
+function saveQuickDecisionState() {
+  localStorage.setItem(STORAGE_KEYS.quickDecision, JSON.stringify(quickDecisionState));
+}
+
+function archiveCurrentGameState() {
+  const prompt = generatePrompt();
+  if (!prompt) return;
+  localStorage.setItem(STORAGE_KEYS.previousGame, JSON.stringify({
+    currentRoundId: state.currentRoundId,
+    rounds: state.rounds,
+    prompt,
+    savedAt: new Date().toISOString(),
+  }));
+}
+
+function getPreviousGameContext() {
+  const raw = localStorage.getItem(STORAGE_KEYS.previousGame);
+  if (!raw) return '';
+  try {
+    const previous = JSON.parse(raw);
+    if (!previous?.prompt) return '';
+    const savedAt = previous.savedAt ? new Date(previous.savedAt).toLocaleString('vi-VN') : 'không rõ thời gian';
+    return `### PREVIOUS GAME SNAPSHOT:\nĐây là dữ liệu ván trước đã lưu tự động vào lúc ${savedAt} để tham khảo và phân tích lại quyết định.\n${previous.prompt}`;
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.previousGame);
+    return '';
+  }
+}
 
 // ============================================================
 // TIMELINE
@@ -109,6 +283,8 @@ function isRoundFilled(r, s) {
 // ============================================================
 function selectRound(id) {
   state.currentRoundId = id;
+  saveCurrentGameState();
+  if (appMode !== 'timeline') setAppMode('timeline');
   buildTimeline();
 
   const r = TFT_DATA.rounds.find(x => x.id === id);
@@ -122,6 +298,166 @@ function selectRound(id) {
   else if (r.type === 'god')     renderGodEditor(r, s);
 
   updatePromptPreview();
+}
+
+function setAppMode(mode) {
+  appMode = mode;
+  localStorage.setItem(STORAGE_KEYS.appMode, mode);
+  document.getElementById('mode-quick')?.classList.toggle('active', mode === 'quick');
+  document.getElementById('mode-timeline')?.classList.toggle('active', mode === 'timeline');
+
+  if (mode === 'quick') {
+    editorPlaceholder.classList.add('hidden');
+    editorContent.classList.remove('hidden');
+    renderQuickDecisionEditor();
+  } else if (state.currentRoundId && state.rounds[state.currentRoundId]) {
+    selectRound(state.currentRoundId);
+  } else {
+    editorContent.classList.add('hidden');
+    editorPlaceholder.classList.remove('hidden');
+  }
+  updatePromptPreview();
+}
+
+function renderQuickDecisionEditor() {
+  const q = quickDecisionState;
+  const gods = TFT_DATA.gods.map(g => `<option value="${g.name}" ${q.god === g.name ? 'selected' : ''}>${g.name}</option>`).join('');
+
+  editorContent.innerHTML = `
+    <div class="quick-card">
+      <div class="round-header quick-header">
+        <div class="round-badge type-augment">⚡</div>
+        <div>
+          <div class="round-title">Quick Decision</div>
+          <div class="round-desc">Chỉ nhập vài thông tin cốt lõi rồi để AI chốt line, level, roll và việc cần làm ngay.</div>
+        </div>
+      </div>
+
+      <div class="quick-grid">
+        <div class="field-group">
+          <div class="field-label">Round hiện tại</div>
+          <input class="form-input" value="${escapeHtmlAttr(q.round)}" placeholder="Ví dụ 3-2" oninput="updateQuickDecisionField('round', this.value)" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Máu</div>
+          <input class="form-input" value="${escapeHtmlAttr(q.hp)}" placeholder="72" oninput="updateQuickDecisionField('hp', this.value)" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Vàng</div>
+          <input class="form-input" value="${escapeHtmlAttr(q.gold)}" placeholder="50" oninput="updateQuickDecisionField('gold', this.value)" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Cấp độ</div>
+          <input class="form-input" value="${escapeHtmlAttr(q.level)}" placeholder="7" oninput="updateQuickDecisionField('level', this.value)" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Nhịp trận</div>
+          <select class="form-input" onchange="updateQuickDecisionField('streak', this.value)">
+            <option value="win" ${q.streak === 'win' ? 'selected' : ''}>Đang winstreak</option>
+            <option value="lose" ${q.streak === 'lose' ? 'selected' : ''}>Đang lose streak</option>
+            <option value="even" ${q.streak === 'even' ? 'selected' : ''}>Đang ngang</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Ý định</div>
+          <select class="form-input" onchange="updateQuickDecisionField('plan', this.value)">
+            <option value="flex" ${q.plan === 'flex' ? 'selected' : ''}>Chưa biết / Flex</option>
+            <option value="reroll" ${q.plan === 'reroll' ? 'selected' : ''}>Muốn reroll</option>
+            <option value="fast8" ${q.plan === 'fast8' ? 'selected' : ''}>Muốn fast 8</option>
+            <option value="fast9" ${q.plan === 'fast9' ? 'selected' : ''}>Muốn fast 9</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Hướng carry</div>
+          <select class="form-input" onchange="updateQuickDecisionField('damageType', this.value)">
+            <option value="flex" ${q.damageType === 'flex' ? 'selected' : ''}>Flex</option>
+            <option value="ad" ${q.damageType === 'ad' ? 'selected' : ''}>AD</option>
+            <option value="ap" ${q.damageType === 'ap' ? 'selected' : ''}>AP</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Thần đang theo</div>
+          <select class="form-input" onchange="updateQuickDecisionField('god', this.value)">
+            <option value="">Chưa chọn</option>
+            ${gods}
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Board hiện tại</div>
+        <textarea class="form-input quick-textarea" placeholder="Ví dụ: 2 Mordekaiser, 2 LeBlanc, frontline tạm..." oninput="updateQuickDecisionField('board', this.value)">${q.board}</textarea>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Bench / shop đáng chú ý</div>
+        <textarea class="form-input quick-textarea" placeholder="Ví dụ: có 2 Karma, shop thấy Vex, đang giữ Fiora..." oninput="updateQuickDecisionField('bench', this.value)">${q.bench}</textarea>
+      </div>
+      <div class="quick-grid quick-grid-two">
+        <div class="field-group">
+          <div class="field-label">Đồ đang có</div>
+          <textarea class="form-input quick-textarea" placeholder="Ví dụ: Guinsoo, Shojin, Găng..." oninput="updateQuickDecisionField('items', this.value)">${q.items}</textarea>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Lõi / ghi chú</div>
+          <textarea class="form-input quick-textarea" placeholder="Ví dụ: lõi đang thấy, lobby nhiều AD, muốn giữ máu..." oninput="updateQuickDecisionField('augments', this.value)">${q.augments}</textarea>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Ghi chú thêm</div>
+        <textarea class="form-input quick-textarea quick-textarea-sm" placeholder="Ví dụ: muốn bài dễ chơi, không muốn pivot nhiều..." oninput="updateQuickDecisionField('notes', this.value)">${q.notes}</textarea>
+      </div>
+
+      <div class="quick-actions">
+        <button class="btn btn-primary" onclick="sendQuickDecisionToAI()">Phân tích ngay</button>
+        <button class="btn btn-ghost" onclick="clearQuickDecision()">Xóa nhanh</button>
+      </div>
+    </div>
+  `;
+}
+
+function updateQuickDecisionField(field, value) {
+  quickDecisionState[field] = value;
+  saveQuickDecisionState();
+  updatePromptPreview();
+}
+
+function clearQuickDecision() {
+  Object.assign(quickDecisionState, createDefaultQuickDecisionState());
+  saveQuickDecisionState();
+  renderQuickDecisionEditor();
+  updatePromptPreview();
+}
+
+function buildQuickDecisionPrompt() {
+  const q = quickDecisionState;
+  const lines = [];
+  if (q.round) lines.push(`Round hiện tại: ${q.round}`);
+  if (q.hp) lines.push(`Máu: ${q.hp}`);
+  if (q.gold) lines.push(`Vàng: ${q.gold}`);
+  if (q.level) lines.push(`Cấp: ${q.level}`);
+  if (q.streak && q.streak !== 'even') lines.push(`Nhịp trận: ${q.streak === 'win' ? 'Đang winstreak' : 'Đang lose streak'}`);
+  if (q.plan && q.plan !== 'flex') lines.push(`Ý định: ${q.plan === 'reroll' ? 'Reroll' : q.plan === 'fast8' ? 'Fast 8' : 'Fast 9'}`);
+  if (q.damageType && q.damageType !== 'flex') lines.push(`Hướng carry mong muốn: ${q.damageType.toUpperCase()}`);
+  if (q.god) lines.push(`Thần đang theo: ${q.god}`);
+  if (q.board) lines.push(`Board hiện tại: ${q.board}`);
+  if (q.bench) lines.push(`Bench / shop đáng chú ý: ${q.bench}`);
+  if (q.items) lines.push(`Đồ hiện có: ${q.items}`);
+  if (q.augments) lines.push(`Lõi / thông tin quan trọng: ${q.augments}`);
+  if (q.notes) lines.push(`Ghi chú thêm: ${q.notes}`);
+  if (!lines.length) return '';
+  return `### QUICK DECISION SNAPSHOT:\n${lines.join('\n')}`;
+}
+
+async function sendQuickDecisionToAI() {
+  const snapshot = buildQuickDecisionPrompt();
+  if (!snapshot) {
+    showToast('Điền ít nhất vài thông tin nhanh trước khi hỏi AI.', 'warn');
+    return;
+  }
+  if (!aiChatOpen) toggleAIChat();
+  const inputEl = document.getElementById('ai-chat-input');
+  inputEl.value = 'Phân tích nhanh spot này. Hãy cho line dễ đánh nhất, mốc level/roll, đồ nên ghép và 3 việc cần làm ngay để tối đa top 1.';
+  await sendChatMessage();
 }
 
 // ============================================================
@@ -299,6 +635,7 @@ function setAugmentSearch(roundId, value) {
   s.augmentSearch = value;
   const listEl = document.getElementById('augment-list');
   if (listEl) listEl.innerHTML = renderAugmentCards(roundId, s);
+  saveCurrentGameState();
 }
 
 function selectTier(roundId, tier) {
@@ -310,6 +647,7 @@ function selectTier(roundId, tier) {
   renderAugmentEditor(TFT_DATA.rounds.find(x => x.id === roundId), s);
   updatePromptPreview();
   buildTimeline();
+  saveCurrentGameState();
 }
 
 function toggleAugment(roundId, augment) {
@@ -323,6 +661,7 @@ function toggleAugment(roundId, augment) {
   renderAugmentEditor(TFT_DATA.rounds.find(x => x.id === roundId), s);
   updatePromptPreview();
   buildTimeline();
+  saveCurrentGameState();
 }
 
 function chooseAugment(roundId, augment) {
@@ -330,6 +669,7 @@ function chooseAugment(roundId, augment) {
   s.chosenAugment = s.chosenAugment === augment ? null : augment;
   renderAugmentEditor(TFT_DATA.rounds.find(x => x.id === roundId), s);
   updatePromptPreview();
+  saveCurrentGameState();
 }
 
 function getAugmentChipClass(tier) {
@@ -377,6 +717,7 @@ function selectGod(roundId, godId) {
   renderGodEditor(TFT_DATA.rounds.find(x => x.id === roundId), s);
   updatePromptPreview();
   buildTimeline();
+  saveCurrentGameState();
 }
 
 // ============================================================
@@ -468,7 +809,7 @@ function bindTagInput(field, roundId, suggestions) {
         addTag(field, roundId, items[highlightIdx].dataset.val, Number(items[highlightIdx].dataset.stars || 0) || null, true);
       } else if (input.value.trim()) {
         const parsed = parseTagInput(field, input.value.trim());
-        addTag(field, roundId, parsed.name, parsed.stars, true, parsed.starsOnly);
+        addTag(field, roundId, parsed.name, parsed.stars, true, parsed.starsOnly, parsed.qtyOnly);
       }
       input.value = '';
       suggestBox.classList.add('hidden');
@@ -502,10 +843,25 @@ function formatSuggestionLabel(match) {
 
 function parseTagInput(field, rawValue) {
   const value = String(rawValue || '').trim();
-  if (!value) return { name: '', stars: null, starsOnly: false };
+  if (!value) return { name: '', stars: null, starsOnly: false, qtyOnly: null, qty: null };
 
   if (field !== 'champions') {
-    return { name: value, stars: null, starsOnly: false };
+    const qtyOnlyMatch = value.match(/^(\d+)$/);
+    if (qtyOnlyMatch) {
+      return { name: '', stars: null, starsOnly: false, qtyOnly: Number(qtyOnlyMatch[1]) || null, qty: null };
+    }
+    return { name: value, stars: null, starsOnly: false, qtyOnly: null, qty: null };
+  }
+
+  const qtyOnlyMatch = value.match(/^(\d+)$/);
+  if (qtyOnlyMatch) {
+    return {
+      name: '',
+      stars: null,
+      starsOnly: false,
+      qtyOnly: Number(qtyOnlyMatch[1]) || null,
+      qty: null,
+    };
   }
 
   const starsOnlyMatch = value.match(/^([123])\s*(?:sao|\*)$/i);
@@ -514,16 +870,20 @@ function parseTagInput(field, rawValue) {
       name: '',
       stars: Number(starsOnlyMatch[1]) || null,
       starsOnly: true,
+      qtyOnly: null,
+      qty: null,
     };
   }
 
   const match = value.match(/^(.*?)(?:[\s,/-]+([123])\s*(?:sao|\*))$/i);
-  if (!match) return { name: value, stars: null, starsOnly: false };
+  if (!match) return { name: value, stars: null, starsOnly: false, qtyOnly: null, qty: null };
 
   return {
     name: match[1].trim(),
     stars: Number(match[2]) || null,
     starsOnly: false,
+    qtyOnly: null,
+    qty: null,
   };
 }
 
@@ -558,8 +918,14 @@ function getSuggestionSearchText(field, suggestion) {
   return [normalizedSuggestion, ...aliases.map(normalizeSearchText)].join(' ');
 }
 
-function addTag(field, roundId, value, stars = null, keepFocus = false, starsOnly = false) {
+function addTag(field, roundId, value, stars = null, keepFocus = false, starsOnly = false, qtyOnly = null) {
   const s = state.rounds[roundId];
+
+  if (qtyOnly) {
+    s.pendingTagQty[field] = qtyOnly;
+    if (keepFocus) focusTagInput(field, roundId);
+    return;
+  }
 
   if (field === 'champions' && starsOnly && stars) {
     const lastChampion = s[field][s[field].length - 1];
@@ -574,15 +940,18 @@ function addTag(field, roundId, value, stars = null, keepFocus = false, starsOnl
   }
 
   if (!value) return;
+  const pendingQty = s.pendingTagQty[field];
   const existing = s[field].find(t => t.name === value && (t.stars || null) === (stars || null));
   if (existing) {
-    existing.qty++;
+    existing.qty += pendingQty || 1;
   } else {
-    s[field].push({ name: value, qty: 1, stars: stars || null });
+    s[field].push({ name: value, qty: pendingQty || 1, stars: stars || null });
   }
+  delete s.pendingTagQty[field];
   selectRound(roundId);
   updatePromptPreview();
   buildTimeline();
+  saveCurrentGameState();
   if (keepFocus) focusTagInput(field, roundId);
 }
 
@@ -597,18 +966,19 @@ function removeTag(field, roundId, index, event, keepFocus = false) {
   selectRound(roundId);
   updatePromptPreview();
   buildTimeline();
+  saveCurrentGameState();
   if (keepFocus) focusTagInput(field, roundId);
 }
 
 // ============================================================
 // PROMPT GENERATION
 // ============================================================
-function generatePrompt() {
-  const lines = [];
+function buildPromptSections() {
+  const sections = [];
 
   TFT_DATA.rounds.forEach(r => {
     const s = state.rounds[r.id];
-    const roundLabel = r.label.replace('Round ', '');
+    const lines = [];
 
     if (r.type === 'round') {
       const hasSth = s.champions.length > 0 || s.pool.length > 0 || s.items.length > 0;
@@ -646,34 +1016,60 @@ function generatePrompt() {
       lines.push(`Lobby ân huệ, tôi chọn **${god.name}** (${god.desc}).`);
       lines.push('');
     }
+
+    const content = lines.join('\n').trim();
+    if (content) {
+      sections.push({
+        roundId: r.id,
+        title: r.label,
+        content,
+      });
+    }
   });
 
-  return lines.join('\n').trim();
+  return sections;
+}
+
+function generatePrompt() {
+  const quickPrompt = buildQuickDecisionPrompt();
+  const timelinePrompt = buildPromptSections().map(section => section.content).join('\n\n').trim();
+  return [quickPrompt, timelinePrompt].filter(Boolean).join('\n\n').trim();
 }
 
 function updatePromptPreview() {
-  const prompt = generatePrompt();
-  if (!prompt) {
+  const sections = [];
+  const quickPrompt = buildQuickDecisionPrompt();
+  if (quickPrompt) {
+    sections.push({ roundId: 'quick', title: 'Quick Decision', content: quickPrompt });
+  }
+  sections.push(...buildPromptSections());
+  if (!sections.length) {
     promptPreview.innerHTML = '<span class="prompt-empty">Prompt sẽ hiện ở đây khi bạn điền thông tin...</span>';
     return;
   }
 
-  // Simple markdown-like render
-  const lines = prompt.split('\n');
-  let html = '';
-  lines.forEach(line => {
-    if (line.startsWith('### ')) {
-      html += `<div class="prompt-divider"></div><div class="prompt-line-header">${line.replace('### ','')}</div>`;
-    } else if (line === '') {
-      html += '';
-    } else {
-      // Bold
-      const rendered = line.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent-gold)">$1</strong>');
-      html += `<div class="prompt-line prompt-line-content">${rendered}</div>`;
-    }
-  });
+  promptPreview.innerHTML = sections.map((section, index) => {
+    const bodyHtml = section.content
+      .split('\n')
+      .map(line => {
+        if (line.startsWith('### ')) {
+          return `<div class="prompt-line-header">${line.replace('### ','')}</div>`;
+        }
+        if (line === '') return '';
+        const rendered = line.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent-gold)">$1</strong>');
+        return `<div class="prompt-line prompt-line-content">${rendered}</div>`;
+      })
+      .join('');
 
-  promptPreview.innerHTML = html;
+    return `
+      <div class="prompt-section ${index > 0 ? 'with-divider' : ''}">
+        <div class="prompt-section-actions">
+          <button class="btn btn-sm btn-ghost prompt-copy-btn" onclick="copyPromptSection('${section.roundId}')">Copy</button>
+        </div>
+        ${bodyHtml}
+      </div>
+    `;
+  }).join('');
 }
 
 // ============================================================
@@ -689,6 +1085,25 @@ function copyPrompt() {
     return;
   }
   fallbackCopyPrompt(prompt);
+}
+
+function copyPromptSection(roundId) {
+  const allSections = [];
+  const quickPrompt = buildQuickDecisionPrompt();
+  if (quickPrompt) allSections.push({ roundId: 'quick', title: 'Quick Decision', content: quickPrompt });
+  allSections.push(...buildPromptSections());
+  const section = allSections.find(item => item.roundId === roundId);
+  if (!section?.content) {
+    showToast('Section này chưa có dữ liệu để copy!', 'warn');
+    return;
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(section.content)
+      .then(() => showToast(`✅ Đã copy ${section.title}!`))
+      .catch(() => fallbackCopyPrompt(section.content));
+    return;
+  }
+  fallbackCopyPrompt(section.content);
 }
 
 function fallbackCopyPrompt(text) {
@@ -779,14 +1194,14 @@ function doReset() {
   const old = document.querySelector('.toast');
   if (old) old.remove();
 
-  TFT_DATA.rounds.forEach(r => {
-    state.rounds[r.id] = { champions: [], pool: [], items: [], tier: null, augments: [], god: null, chosenAugment: null, augmentSearch: '' };
-  });
+  archiveCurrentGameState();
+  state.rounds = createEmptyRoundsState();
   state.currentRoundId = null;
   editorContent.classList.add('hidden');
   editorPlaceholder.classList.remove('hidden');
   buildTimeline();
   updatePromptPreview();
+  saveCurrentGameState();
   showToast('✅ Đã reset toàn bộ!');
 }
 
@@ -794,6 +1209,8 @@ function doReset() {
 // INIT
 // ============================================================
 buildTimeline();
+updatePromptPreview();
+setAppMode(appMode);
 
 // ============================================================
 // META COMPS PANEL
@@ -886,7 +1303,7 @@ function renderMetaComps() {
 
 let aiChatOpen = false;
 let chatMessages = [
-  {"role": "system", "content": "You are an expert Teamfight Tactics (TFT) assistant for Patch 17.1. Provide helpful, short, concise, and professional gameplay advice in Vietnamese. Format important parts with bold and inline code. Use the provided context about the current game state to guide your advice."}
+  {"role": "system", "content": "You are an expert Teamfight Tactics (TFT) assistant for Patch 17.1. Provide helpful, short, concise, and professional gameplay advice in Vietnamese. Format important parts with bold and inline code. Use the provided context about the current game state to guide your advice. The user wants the lowest-effort line that still maximizes placement and pushes for top 1 whenever the spot allows it."}
 ];
 
 function toggleAIChat() {
@@ -977,7 +1394,8 @@ function getAIContext() {
   let promptPreview = generatePrompt() || "Chưa có dữ liệu vòng đấu nào được chọn. Người chơi đang ở sảnh chờ hoặc chưa cập nhật số liệu.";
   const metaCompStats = buildMetaCompStatsContext();
   const metaCompContext = buildMetaCompsContext();
-  return `### CURRENT GAME STATE:\n${promptPreview}\n\n### PATCH 17.1 META COMPS:\nDưới đây là dữ liệu meta comp cần dùng để tư vấn. Tier X là đội hình tình huống, chỉ đề xuất khi điều kiện phù hợp.\n${metaCompStats}\nKhi người chơi hỏi có bao nhiêu bài thuộc một tier, hãy trả lời đúng theo dataset này, không tự suy diễn từ kiến thức bên ngoài.\n\n${metaCompContext}`;
+  const previousGameContext = getPreviousGameContext();
+  return `### USER GOAL:\nNgười chơi muốn bỏ ít công nhất nhưng vẫn leo rank hiệu quả nhất. Khi có nhiều line tương đương, hãy ưu tiên line dễ đánh, ít xoay bài, ít pivot, ít yêu cầu nhớ nhiều mốc nhỏ. Tuy vậy mục tiêu cuối cùng vẫn là tối đa hóa placement và phải chỉ ra line/top cap có khả năng top 1 khi spot đủ đẹp.\n\n### CURRENT GAME STATE:\n${promptPreview}\n\n${previousGameContext ? `${previousGameContext}\n\n` : ''}${STRATEGY_GUIDE_CONTEXT}\n\n### PATCH 17.1 META COMPS:\nDưới đây là dữ liệu meta comp cần dùng để tư vấn. Tier X là đội hình tình huống, chỉ đề xuất khi điều kiện phù hợp.\n${metaCompStats}\nKhi người chơi hỏi có bao nhiêu bài thuộc một tier, hãy trả lời đúng theo dataset này, không tự suy diễn từ kiến thức bên ngoài.\n\n${metaCompContext}`;
 }
 
 async function sendChatMessage() {
@@ -993,7 +1411,7 @@ async function sendChatMessage() {
   appendChatMessage(text, 'user');
   
   // Set system prompt dynamically with the latest context from the UI
-  chatMessages[0].content = `You are an expert Teamfight Tactics (TFT) assistant for Patch 17.1. Provide helpful, short, concise, and professional gameplay advice in Vietnamese. Format important parts with bold and inline code. \n\n${getAIContext()}`;
+  chatMessages[0].content = `You are an expert Teamfight Tactics (TFT) assistant for Patch 17.1. Provide helpful, short, concise, and professional gameplay advice in Vietnamese. Format important parts with bold and inline code. The user wants the lowest-effort line that still produces the highest rank possible, and should be pushed toward top-1 lines whenever realistic for the spot. \n\n${getAIContext()}`;
   
   chatMessages.push({"role": "user", "content": text});
   
