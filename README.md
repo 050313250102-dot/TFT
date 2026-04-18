@@ -1,10 +1,6 @@
 # TFT
 
-Web app tĩnh cho TFT, hiện được đồng bộ giữa:
-
-- local repo: `D:\SONG HOANG\TFT`
-- VPS source: `/var/www/html/tft`
-- GitHub repo: `https://github.com/050313250102-dot/TFT`
+Web app tĩnh cho TFT
 
 ## 1. Lấy code
 
