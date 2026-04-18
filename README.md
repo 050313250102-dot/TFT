@@ -80,25 +80,9 @@ Trong thư mục repo có sẵn:
 
 Chỉ cần bấm file này để đẩy source local lên VPS.
 
-## 5. VPS
-
-- VPS path: `/var/www/html/tft`
-- Pull từ VPS về local: `pull-from-vps.cmd`
-- Push từ local lên VPS: `push-to-vps.cmd`
-
-## 6. Lưu ý
+## 5. Lưu ý
 
 - Repo hiện dùng branch `master`
 - Windows có thể hiện cảnh báo `LF/CRLF`, hiện chưa ảnh hưởng chạy app
 - Các file `pull-from-vps.*` và `push-to-vps.*` là file tiện ích local để đồng bộ
 
-## 7. GitHub
-
-Repo hiện tại:
-
-`https://github.com/050313250102-dot/TFT`
-
-Nếu muốn người khác cùng làm:
-
-- repo `Private`: mời họ vào `Settings` -> `Collaborators`
-- repo `Public`: chỉ cần gửi link repo
